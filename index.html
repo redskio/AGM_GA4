@@ -1127,6 +1127,20 @@ function toggleWishlist(productId, event) {
   }
   saveWishlist();
   updateWishlistCount();
+
+  // [GA4] add_to_wishlist / remove_from_wishlist — 상품 상세페이지 하트 버튼 (클릭 후 상태 기준)
+  if (p && event && event.currentTarget && event.currentTarget.id === 'btn-wishlist-detail') {
+    trackEvent(isWished(productId) ? 'add_to_wishlist' : 'remove_from_wishlist', {
+      item_name:      p.name,
+      item_category:  p.category,
+      value:          p.price,
+      currency:       'KRW',
+      click_location: 'product_detail',
+      wishlist_count: wishlist.length,
+      login_status:   currentUser ? 'logged_in' : 'logged_out',
+    });
+  }
+
   document.querySelectorAll('.btn-wishlist[data-product-id="' + productId + '"], #btn-wishlist-detail').forEach(btn => {
     if (btn.dataset.productId === productId) {
       btn.classList.toggle('is-active', isWished(productId));
