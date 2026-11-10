@@ -2295,6 +2295,16 @@ function doSearch(event) {
   if (event) event.preventDefault();
   const query = document.getElementById('search-input').value.trim();
   if (!query) { navigate('/'); return; }
+
+  // [GA4] search — 상단 검색창에서 검색 실행 시 (GA4 추천 이벤트)
+  const resultCount = searchProducts(query).length;
+  trackEvent('search', {
+    search_term:         query,
+    search_result_count: resultCount,
+    search_result_type:  resultCount ? 'has_results' : 'no_results',
+    page_type:           ga4PageType(),
+  });
+
   pendingScrollTo = 'section-all-products';
   navigate('/search/' + encodeURIComponent(query));
 }
@@ -2334,7 +2344,41 @@ function goToBanner(idx) {
   document.getElementById('banner-track').style.transform = `translateX(-${bannerIdx * 100}%)`;
   document.querySelectorAll('.banner-dot').forEach((d, i) => d.classList.toggle('is-active', i === bannerIdx));
   resetBannerTimer();
+  trackTopBannerView();
 }
+
+// ── [GA4] top_banner_view / top_banner_click ──
+// 노출: 현재 슬라이드가 화면에 50% 이상 보이고 탭이 활성 상태일 때, 슬라이드당 페이지 로드 1회
+const ga4BannerSeen = new Set();
+let ga4HeroVisible = false;
+function ga4BannerParams(slide) {
+  return {
+    banner_name:     slide.dataset.bannerTitle,
+    banner_position: Number(slide.dataset.bannerId),
+  };
+}
+function trackTopBannerView() {
+  if (!ga4HeroVisible || document.hidden) return;
+  const slide = document.getElementById('banner-' + (bannerIdx + 1));
+  if (!slide || ga4BannerSeen.has(slide.id)) return;
+  ga4BannerSeen.add(slide.id);
+  trackEvent('top_banner_view', ga4BannerParams(slide));
+}
+if ('IntersectionObserver' in window) {
+  new IntersectionObserver(([en]) => {
+    ga4HeroVisible = en.isIntersecting;
+    trackTopBannerView();
+  }, { threshold: 0.5 }).observe(document.getElementById('hero'));
+}
+document.addEventListener('visibilitychange', trackTopBannerView);
+
+// 클릭: 배너 CTA 버튼 (화살표·점 네비게이션은 제외)
+document.getElementById('banner-track').addEventListener('click', e => {
+  const cta = e.target.closest('.banner-cta');
+  if (!cta) return;
+  const slide = cta.closest('.banner-slide');
+  trackEvent('top_banner_click', { ...ga4BannerParams(slide), click_text: cta.textContent.replace('→', '').trim() });
+}, true);
 
 function moveBanner(dir) {
   goToBanner(bannerIdx + dir);
