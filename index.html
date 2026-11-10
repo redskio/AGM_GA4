@@ -1181,7 +1181,11 @@ function handlePromo(promoId) {
   if (promoId === 'signup-coupon') { currentUser ? showToast('이미 로그인되어 있습니다') : openSignupModal(); }
   else showToast('🚚 3만원 이상 주문 시 배송비가 무료입니다');
 }
-function handleEvent(eventId, category) { quickCategory(category); }
+function handleEvent(eventId, category) {
+  // [GA4] promotion_click — 시원 할인 프로모션 배너 클릭
+  if (eventId === 'summer-sale') trackEvent('promotion_click', { promotion_name: '시원 할인 프로모션' });
+  quickCategory(category);
+}
 function handleFooterLink(name) { showToast(name + ' — 데모 사이트에서는 제공되지 않습니다'); }
 
 // ────────────────────────────────
@@ -1602,6 +1606,51 @@ function tickDealTimer() {
   document.getElementById('deal-timer').textContent = `마감까지 ${hh}:${mm}:${ss}`;
 }
 
+// ────────────────────────────────
+// GA4 이벤트 추적 (텍소노미: GA4 web이벤트 리스트)
+// ────────────────────────────────
+function trackEvent(name, params) {
+  if (typeof gtag === 'function') gtag('event', name, params);
+}
+
+// 메인 추적 대상 영역 → section 매개변수 값
+const GA4_ITEM_SECTIONS = [['today-deal-list', '특가'], ['best-product-list', '베스트']];
+const GA4_ITEM_SELECTOR = GA4_ITEM_SECTIONS.map(([id]) => `#${id} [data-product-id]`).join(', ');
+function ga4SectionOf(el) {
+  const hit = GA4_ITEM_SECTIONS.find(([id]) => el.closest('#' + id));
+  return hit ? hit[1] : undefined;
+}
+
+// [GA4] item_view — 특가/베스트 제품이 화면에 50% 이상 노출 시 (제품당 페이지 로드 1회)
+let ga4ItemViewObserver = null;
+function observeHomeItemViews() {
+  if (!('IntersectionObserver' in window)) return;
+  if (!ga4ItemViewObserver) {
+    ga4ItemViewObserver = new IntersectionObserver(entries => {
+      entries.forEach(en => {
+        if (!en.isIntersecting) return;
+        ga4ItemViewObserver.unobserve(en.target);
+        trackEvent('item_view', { item_name: en.target.dataset.productName, section: ga4SectionOf(en.target) });
+      });
+    }, { threshold: 0.5 });
+  }
+  document.querySelectorAll(GA4_ITEM_SELECTOR).forEach(el => ga4ItemViewObserver.observe(el));
+}
+
+// [GA4] item_click — 특가/베스트 제품 클릭 (상세 이동 전에 잡도록 capture 단계)
+document.addEventListener('click', e => {
+  const card = e.target.closest(GA4_ITEM_SELECTOR);
+  if (card) trackEvent('item_click', { item_name: card.dataset.productName, section: ga4SectionOf(card) });
+}, true);
+
+// [GA4] add_to_cart / purchase 공통 매개변수 — 상세페이지에서 선택된 옵션·수량 기준
+function ga4DetailParams(productId) {
+  const product = PRODUCTS.find(p => p.id === productId);
+  if (!product) return null;
+  const v = getVariant(product, selectedVariantId);
+  return { item_name: product.name, item_option: v.label, value: v.price * detailQty, currency: 'KRW' };
+}
+
 // ── 상품 노출 추적용 클래스 부여 (IntersectionObserver) ──
 let impressionObserver = null;
 function observeImpressions() {
@@ -1813,6 +1862,8 @@ function switchDetailTab(tab, btn) {
 }
 
 function buyNow(productId) {
+  const ga4 = ga4DetailParams(productId);
+  if (ga4) trackEvent('purchase', ga4);   // [GA4] purchase — 상세페이지 구매 버튼 클릭
   addToCart(productId, detailQty, true, selectedVariantId);
   goCheckout();
 }
@@ -1861,6 +1912,8 @@ function syncDetailPrice() {
 }
 
 function addToCartFromDetail(productId) {
+  const ga4 = ga4DetailParams(productId);
+  if (ga4) trackEvent('add_to_cart', ga4);   // [GA4] add_to_cart — 상세페이지 장바구니 담기 클릭
   addToCart(productId, detailQty, false, selectedVariantId);
 }
 
@@ -2271,6 +2324,7 @@ renderAuthState();
 updateCartCount();
 updateWishlistCount();
 renderHomeSections();
+observeHomeItemViews();   // [GA4] item_view 노출 감시 시작
 renderRecentlyViewed();
 tickDealTimer();
 setInterval(tickDealTimer, 1000);
