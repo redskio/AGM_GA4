@@ -453,7 +453,7 @@
           <button id="btn-logout" onclick="doLogout()">로그아웃</button>
         </div>
       </div>
-      <button class="btn-header" id="btn-wishlist-header" onclick="openWishlist()">
+      <button class="btn-header" id="btn-wishlist-header" onclick="openWishlist('header')">
         ♡ <span class="cart-item-count" id="wishlist-count">0</span>
       </button>
       <button class="btn-cart" id="btn-open-cart" onclick="openCart()">
@@ -1336,7 +1336,24 @@ function showPage(name) {
 
 function goHome()      { navigate('/'); }
 function openCart()    { navigate('/cart'); }
-function openWishlist(){ navigate('/wishlist'); }
+function openWishlist(clickLocation) {
+  // [GA4] go_to_wishlist — 찜 목록 버튼 클릭 (이동 전 페이지 기준으로 수집)
+  if (clickLocation) {
+    trackEvent('go_to_wishlist', {
+      click_location: clickLocation,
+      page_type:      ga4PageType(),
+      wishlist_count: wishlist.length,
+      login_status:   currentUser ? 'logged_in' : 'logged_out',
+    });
+  }
+  navigate('/wishlist');
+}
+
+// 현재 라우트 → page_type 매개변수 값
+function ga4PageType() {
+  const name = parseRoute().name;
+  return { product: 'product_detail', order: 'order_complete' }[name] || name;
+}
 
 // ────────────────────────────────
 // PRODUCT GRID
